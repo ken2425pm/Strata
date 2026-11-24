@@ -9,6 +9,10 @@ if(STRATA_ENABLE_CUDA OR STRATA_ENABLE_HIP)
   add_library(strata_core STATIC src/core/device.cu src/core/pinned.cu src/platform/memory.cpp src/platform/io_priority.cpp src/core/graph.cpp src/core/weights.cpp
                                src/core/layout.cpp)
   target_include_directories(strata_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+  # strata_kernels_cpu: pinned.cu calls kernels::cpu::expert_layout() for the STRATA_NUMA_ARENA slice
+  # placement, so every executable that links strata_core needs the CPU layout library. PUBLIC, not
+  # PRIVATE, or the loader/bench/test links fail with "undefined symbol: expert_layout()" (#6529).
+  target_link_libraries(strata_core PUBLIC strata_kernels_cpu)
   # the DFlash2 drafter (src/core/dflash2.cpp, src/kernels/cuda/dflash2.cu) exists in the CUDA and HIP builds; the Metal and SYCL builds compile without it
   target_compile_definitions(strata_core PUBLIC STRATA_HAVE_DFLASH2=1)
   if(STRATA_ENABLE_CUDA AND STRATA_EXPERIMENTAL_SM60)

@@ -130,6 +130,7 @@ endmacro()
 macro(strata_hip_gfx906_sources)
 if(STRATA_HIP_GFX906)
   file(GLOB_RECURSE _strata_cu CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cu ${CMAKE_CURRENT_SOURCE_DIR}/bench/micro/*.cu
+       ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cu
        ${CMAKE_CURRENT_SOURCE_DIR}/../terminal/tools/vision/*.cu)
   set_source_files_properties(${_strata_cu} PROPERTIES LANGUAGE HIP)
 endif()
