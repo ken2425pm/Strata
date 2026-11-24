@@ -98,6 +98,13 @@ inline hipError_t strata_device_get_attribute(int* v, hipDeviceAttribute_t a, in
 #define cudaDeviceCanAccessPeer hipDeviceCanAccessPeer
 #define cudaDeviceEnablePeerAccess hipDeviceEnablePeerAccess
 #define cudaDeviceDisablePeerAccess hipDeviceDisablePeerAccess
+// gfx900/gfx906 (wave64 compat, this patch): the peer-topology probe in src/core/peer_experts.cpp compiles on this
+// target (its guard is !STRATA_USE_HIP, and the compat build defines STRATA_HIP_GFX906 instead), so the P2P attribute
+// and PCI-bus-id forms need the HIP names too - guarding the probe out instead would leave it trusting peer DMA
+// blindly, which is exactly what is unreliable on this box.  Same argument order as the CUDA calls.
+#define cudaDeviceGetP2PAttribute hipDeviceGetP2PAttribute
+#define cudaDevP2PAttrNativeAtomicSupported hipDevP2PAttrNativeAtomicSupported
+#define cudaDeviceGetPCIBusId hipDeviceGetPCIBusId
 #define cudaDeviceGetStreamPriorityRange hipDeviceGetStreamPriorityRange
 #define cudaDriverGetVersion hipDriverGetVersion
 #define cudaRuntimeGetVersion hipRuntimeGetVersion
