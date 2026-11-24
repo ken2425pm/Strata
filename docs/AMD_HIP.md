@@ -38,6 +38,7 @@ runs are not supported. Use the [package table](#ready-made-packages) to match y
 | Ryzen AI Max (Strix Halo) | gfx1151 | [STRIX_HALO.md](STRIX_HALO.md) |
 | Radeon 780M / 760M | gfx1103 | Linux, opt-in build: [RADEON_780M.md](RADEON_780M.md) |
 | Instinct MI50 / MI60, Radeon VII | gfx906 | Source build, community-tested ([gfx906](#gfx906-instinct-mi50--mi60-radeon-vii-wave64-built-from-source)) |
+| Instinct MI25 | gfx900 | Source build, community-tested ([gfx900](#gfx900-instinct-mi25-wave64-built-from-source)) |
 
 Strix Point (890M / 880M, gfx1150) and Krackan (860M / 840M, gfx1152) are named and not supported by setup. RDNA1
 (gfx1012) builds by hand: [OLDER_GPUS.md](OLDER_GPUS.md#amd-building-gfx906-and-gfx1012).
@@ -625,6 +626,53 @@ In the config: `"args": [ ..., "--pipeline-windows", "2", "--trim-stage-weights"
 
 Not done on gfx906: setup detection and automatic build, Windows, images (`--vision`), MI60 and Radeon VII (same ISA, not run),
 a single-card run. Other measurements are under [History](#history--older-measurements).
+
+## gfx900 (Instinct MI25): wave64, built from source
+
+gfx900 is Vega 10, wave64, for the same reasons as gfx906: no WMMA, no packed byte arithmetic, and it is
+the one supported architecture **below** the dot-product rung — `v_dot2_f32_f16` arrives with gfx906, so
+the engine takes scalar fallbacks for `fdot2` and `sdot4`. The wave32 backend refuses it; the gfx906
+compat layer runs it.
+
+```sh
+cmake -S engine -B build-gfx900 -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_PREFIX_PATH=/opt/rocm-6.3.3 \
+  -DCMAKE_C_COMPILER=/opt/rocm-6.3.3/lib/llvm/bin/clang \
+  -DCMAKE_CXX_COMPILER=/opt/rocm-6.3.3/lib/llvm/bin/clang++ \
+  -DCMAKE_HIP_COMPILER=/opt/rocm-6.3.3/lib/llvm/bin/clang++ \
+  -DSTRATA_HIP_GFX906=ON -DCMAKE_HIP_ARCHITECTURES=gfx900 -DSTRATA_HIP_ARCHS=gfx900 \
+  -DSTRATA_ISA_FLOOR=avx   -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+  -DCMAKE_HIP_COMPILER_LAUNCHER=ccache
+ninja -C build-gfx900 strata strata-inkling
+```
+
+`-DSTRATA_ISA_FLOOR=avx` is for hosts whose CPU predates AVX2 (Sandy/Ivy Bridge Xeons, as on the
+2 x MI25 reference pair); drop it on a modern CPU. The three ccache launchers matter: without them a
+single translation unit such as `hy4_main.hip.cpp` recompiles from scratch on every build. For the
+inkling lane add `-DSTRATA_BUILD_INKLING=ON -DSTRATA_BUILD_INKLING2=ON -DSTRATA_INK_HIP_EXTRA_FLAGS=-O1`
+— both flags are needed, and `-O1` avoids a clang 18 ISel crash at `-O3` on `ink_hip_backend.cpp`.
+
+Run it with `--serve` as on any HIP build. `STRATA_VERIFY_ASYNC_LAUNCH=1` is required here: a plain
+graph launch of the verify window blocks on the calling thread on this runtime, and the first serve
+request deadlocks without the helper-thread launch. Peer DMA between cards on different sockets does
+not work (the runtime reports `canAccessPeer=1` and copies nothing); the engine detects it and stages
+through host-pinned memory, which costs bandwidth, not correctness.
+
+What runs on gfx900 as of the 2 x MI25 reference pair: the main engine (Qwen3.8-Flash-Next),
+`strata-inkling` (Inkling-2-Mini, including `--vision`), and `strata-hy4` (Hy4-Flash, text and vision).
+Not run: long context beyond 8 K (prompt processing is the limit, ~12 tok/s, not memory — the MLA KV
+costs about 24 KB per token), the larger `strata-hy4` expert sets (SQ-96/SQ-128), and MI60/MI50
+variants of the same ISA.
+
+The Qwen3.6-35B family is **not** available on this build: its engine path (`src/qwen35`) is excluded
+when `STRATA_HIP_GFX906` is set, because it calls `cublasSgemm` and `cublasGemmStridedBatchedEx` (not
+mapped by the compat layer) and its kernels assume 32-lane warps. The refusal message mentions an
+unfinished SYCL port; on a gfx906-compat build the real reason is the wave32/wave64 and cuBLAS gap.
+
+Not done on gfx900: setup detection and automatic build (the installer's supported list omits the
+architecture), Windows, and images on the main engine (it needs the separate `strata-vision` reader and
+a per-model mmproj). Measurements here come from the reporter's two-card pair, not from the
+maintainers.
 
 ## Tuning table
 
