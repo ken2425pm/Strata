@@ -2239,7 +2239,7 @@ void mla_attend(hipStream_t s, const __half* qa, const __half* cache, const floa
         hipLaunchKernelGGL(k_attend_simple_q8, dim3(a.NH, a.M), dim3(256), 0, s, qa, cache, sinks, ctx, a);
         return;
     }
-    if (!HY4_MMA || hy4_is_rdna2()) {
+    if (hy4_no_wmma()) {
         hipLaunchKernelGGL(k_attend_rdna2, dim3(a.NH / 16, S, a.M), dim3(128), 0, s, qa, cache, sinks, ctx, part, a, S, tps);
         if (S > 1) hipLaunchKernelGGL(k_combine, dim3(16, a.NH / 16, a.M), dim3(256), 0, s, part, ctx, a.NH, S);
         return;
@@ -2258,7 +2258,7 @@ void mla_vup(hipStream_t s, const __half* ctx, const __half* wv_b, const float* 
 #if HY4_CUDA
         if (cublas_mla_mode() >= 1 && M >= skd::cublas_pf_min_m() && mla_vup_cublas(s, ctx, wv_b, gate, o, M, NH)) return;
 #else
-        if (!HY4_MMA || hy4_is_rdna2()) {
+        if (hy4_no_wmma()) {
             hipLaunchKernelGGL(k_head_gemm_rdna2<1>, dim3(MLA_VHEAD / 64, (M + 63) / 64, NH), dim3(256), 0, s, (const void*)ctx, wv_b, gate, o, M, NH, 0, 0.f);
             return;
         }
@@ -2279,7 +2279,7 @@ void mla_transpose_wk(hipStream_t s, const __half* wk_b, __half* wk_bt, int NH) 
 
 void mla_prep_q_t(hipStream_t s, const float* q_b, const __half* wk_bt, __half* qa, int M, int NH, int p0, float theta) {
 #if !HY4_CUDA
-    if (!HY4_MMA || hy4_is_rdna2()) {
+    if (hy4_no_wmma()) {
         hipLaunchKernelGGL(k_head_gemm_rdna2<0>, dim3(MLA_KV_LORA / 64, (M + 63) / 64, NH), dim3(256), 0, s, (const void*)q_b, wk_bt, (const float*)nullptr, qa, M, NH, p0, theta);
         return;
     }

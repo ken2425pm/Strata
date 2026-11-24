@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
                 ms /= reps;
                 const double flops = 2.0 * 7077888.0 * P;
                 printf("moe %-5s M=%5d pairs=%6d experts_used=%3d weights_read=%7.1f MB  %8.3f ms  %6.1f GB/s  %6.2f TFLOPs  %9.0f tokens/s (1 layer)\n",
-                       mode == 0 ? "dec" : ((!HY4_MMA || hy4_is_rdna2()) ? "rdna2" : "wmma"), M, P, nused, wbytes / 1e6,
+                       mode == 0 ? "dec" : (hy4_no_wmma() ? "rdna2" : "wmma"), M, P, nused, wbytes / 1e6,
                        ms, wbytes / 1e6 / ms, flops / (ms * 1e-3) / 1e12, M / (ms * 1e-3));
             }
             if (M == 1) {  // one-token slot-record path: same numbers as the generic decode kernels, timed the same way
@@ -452,7 +452,7 @@ int main(int argc, char** argv) {
             linear_h_ref(0, fmt, W, N, K, X, Y, M);
 #endif
         };
-        printf("== %s GEMM\n", (!HY4_MMA || hy4_is_rdna2()) ? "RDNA2 sdot4/fdot2" : "WMMA");
+        printf("== %s GEMM\n", hy4_no_wmma() ? "RDNA2 sdot4/fdot2" : "WMMA");
         const Case gc[] = {{"gemm q_b sparse S5 [8192,1024]", FMT_S5, 8192, 1024},
                            {"gemm S5 [3072,3072]", FMT_S5, 3072, 3072},
                            {"gemm dense gate S6 [13824,3072]", FMT_S6, 13824, 3072},

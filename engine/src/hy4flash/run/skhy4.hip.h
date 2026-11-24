@@ -27,7 +27,7 @@ namespace hy4 {
 namespace skd {
 // tuning knob: M <= lin_gemv_max_m() (valid up to 16) uses the bandwidth GEMV, whose per-row result does not depend on M (speculative verify windows, DFly2)
 inline int& lin_gemv_max_m() {
-    static int v = (!HY4_MMA || hy4_is_rdna2()) ? 16 : 4;
+    static int v = hy4_no_wmma() ? 16 : 4;
     return v;
 }
 #if HY4_CUDA && HY4_MMA
@@ -54,7 +54,7 @@ inline void linear_h(hipStream_t s, int fmt, const void* W, int N, int K, const 
         linear_h_gemv(s, fmt, W, N, K, X, Y, M);
     }
 #if !HY4_CUDA
-    else if (hy4_is_rdna2()) linear_h_rdna2(s, fmt, W, N, K, X, Y, M);
+    else if (hy4_no_wmma()) linear_h_rdna2(s, fmt, W, N, K, X, Y, M);
 #endif
 #if HY4_MMA
     else if (M <= 16) {

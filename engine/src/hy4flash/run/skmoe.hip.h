@@ -1476,7 +1476,7 @@ inline int& moe_has_cpu() { static int v = 0; return v; }  // 1 = some experts a
 #define HY4_MOE_DEC_MAXM 16
 #endif
 inline int& moe_dec_max_m() {
-    static int v = (!HY4_MMA || hy4_is_rdna2()) ? 16 : 4;
+    static int v = hy4_no_wmma() ? 16 : 4;
     return v;
 }
 }
@@ -1528,7 +1528,7 @@ inline void moe_experts(hipStream_t s, const uint8_t* sec4_base, const ExpertDev
         }
     }
 #if !HY4_CUDA
-    else if (!HY4_MMA || hy4_is_rdna2()) {
+    else if (hy4_no_wmma()) {
         skd::launch_moe_rdna2(s, sec4_base, experts, z, topk_w, M, eb, w);
     }
 #endif

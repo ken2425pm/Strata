@@ -965,7 +965,12 @@ if(STRATA_BUILD_HY4)
     set(_strata_hy4_reader src/hy4flash/metal/strata_reader_nozstd.cpp)
   endif()
   set(_strata_hy4_gpu_srcs src/hy4flash/run/hy4_main.hip.cpp src/hy4flash/run/mla_attn.hip.cpp)
-  if(STRATA_ENABLE_CUDA)
+  # The gfx906 compat build forces STRATA_ENABLE_CUDA on (its CUDA::* targets are HIP aliases), so
+  # testing STRATA_ENABLE_CUDA alone makes CMake request the real CUDA language and fail with
+  # "The language CUDA was requested for compilation but was not enabled" (no nvcc here).  These
+  # sources are .hip.cpp and already include the HIP serve header, so the compat build compiles them
+  # as HIP, exactly like the inkling2 lane.
+  if(STRATA_ENABLE_CUDA AND NOT STRATA_HIP_GFX906)
     set_source_files_properties(${_strata_hy4_gpu_srcs} PROPERTIES LANGUAGE CUDA)
   else()
     set_source_files_properties(${_strata_hy4_gpu_srcs} PROPERTIES LANGUAGE HIP)

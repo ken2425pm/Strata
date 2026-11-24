@@ -99,6 +99,12 @@ inline const char* gpu_arch(const cudaDeviceProp& p) {
     return b;
 }
 inline bool hy4_is_rdna2() { return false; }
+// Every CUDA card this lane targets has mma.sync, so the WMMA kernels are always the right choice
+// here.  Defined for the CUDA branch too because the callers (skmoe.hip.h, sk_bench.hip.cpp,
+// linear_h in skhy4.hip.h) are not all inside a !HY4_CUDA guard: without this the NVIDIA build would
+// fail on an undeclared name, and no NVIDIA compiler exists on the machine where this was written to
+// catch it.
+inline bool hy4_no_wmma() { return false; }
 __device__ __forceinline__ void hy4_sync_lds() { __syncthreads(); }
 }  // namespace hy4
 namespace hy4 {
@@ -412,6 +418,18 @@ inline bool hy4_is_rdna2() {
     return cached != 0;
 #endif
 }
+// WMMA dispatches are written as "if (!HY4_MMA || hy4_is_rdna2()) take the hand-written kernel else
+// WMMA", which reads as "not RDNA2 => matrix cores". That is false for every pre-gfx11 arch: gfx900,
+// gfx906 and gfx90a have no WMMA, and wmma_f16 there compiles to a no-op that returns its accumulator
+// (see the !HY4_DEV_WMMA branch above). Dispatching to k_attend_wmma/k_head_gemm on those cards
+// silently zeroes the output instead of failing loudly, so ask the capability, not the arch family.
+inline bool hy4_no_wmma() {
+#if HY4_MMA && HY4_DEV_WMMA
+    return hy4_is_rdna2();
+#else
+    return true;
+#endif
+}
 typedef _Float16 hv2 __attribute__((ext_vector_type(2)));
 __device__ __forceinline__ uint32_t h2_sub(uint32_t a, uint32_t b) { return __builtin_bit_cast(uint32_t, __builtin_bit_cast(hv2, a) - __builtin_bit_cast(hv2, b)); }
 __device__ __forceinline__ uint32_t h2_mul(uint32_t a, uint32_t b) { return __builtin_bit_cast(uint32_t, __builtin_bit_cast(hv2, a) * __builtin_bit_cast(hv2, b)); }
@@ -419,7 +437,19 @@ __device__ __forceinline__ uint32_t h2_splat(float f) {
     const hv2 h = {(_Float16)f, (_Float16)f};
     return __builtin_bit_cast(uint32_t, h);
 }
-__device__ __forceinline__ float h2_dot_f32(uint32_t a, uint32_t b, float c) { return __builtin_amdgcn_fdot2(__builtin_bit_cast(hv2, a), __builtin_bit_cast(hv2, b), c, false); }
+// gfx900 (Vega 10, MI-25) is the one arch in this tree without dot2-insts: v_dot2_f32_f16 arrives
+// with gfx906, so the intrinsic fails to compile for it ("'__builtin_amdgcn_fdot2' needs target
+// feature dot10-insts").  Every other supported arch keeps the intrinsic; gfx900 gets the scalar
+// double-FMA the instruction would perform -- the same fallback the inkling2 lane uses.
+__device__ __forceinline__ float h2_dot_f32(uint32_t a, uint32_t b, float c) {
+#if defined(__gfx900__)
+    const hv2 ha = __builtin_bit_cast(hv2, a);
+    const hv2 hb = __builtin_bit_cast(hv2, b);
+    return fmaf((float)ha[1], (float)hb[1], fmaf((float)ha[0], (float)hb[0], c));
+#else
+    return __builtin_amdgcn_fdot2(__builtin_bit_cast(hv2, a), __builtin_bit_cast(hv2, b), c, false);
+#endif
+}
 __device__ __forceinline__ int sdot4_i32(int a, int b, int c) {
 #if HY4_HAVE_SDOT4
     return __builtin_amdgcn_sdot4(a, b, c, false);
