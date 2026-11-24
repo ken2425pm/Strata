@@ -1,7 +1,11 @@
 // src/core/verify.cpp - see include/strata/core/verify.hpp.
 // HostGraphLaunch (the graph launched by the calling thread, or by a helper thread so this one can serve the doorbells): CUDA builds,
-// and the Windows HIP build (STRATA_VERIFY_ASYNC_LAUNCH=1 launches from a helper thread; STRATA_LAUNCH_PROBE=1 logs the launch timing).
-#if (!defined(STRATA_USE_HIP) && !defined(STRATA_HIP_GFX906)) || (defined(STRATA_USE_HIP) && !defined(STRATA_HIP_GFX906) && defined(_WIN32))
+// the Windows HIP build (STRATA_VERIFY_ASYNC_LAUNCH=1 launches from a helper thread; STRATA_LAUNCH_PROBE=1 logs the launch timing), and
+// the Linux HIP gfx906-compat build: on ROCm 6.3.3 + gfx900 (Vega 10, wave64) the plain cudaGraphLaunch of a doorbell graph BLOCKS on the
+// calling thread (the runtime's launch path polls instead of returning after the submit; the graph's wait_flag_ge kernels wait for the
+// very doorbells the blocked thread would raise) - the first serve request's prompt window deadlocks with the GPU finished and 0 served.
+// The helper-thread launch is the wrapper's own answer (gfx900 build note, 11-10).
+#if (!defined(STRATA_USE_HIP) && !defined(STRATA_HIP_GFX906)) || (defined(STRATA_USE_HIP) && !defined(STRATA_HIP_GFX906) && defined(_WIN32)) || defined(STRATA_HIP_GFX906)
 #define STRATA_VERIFY_HGL 1
 #endif
 #include "strata/core/batch_rows.hpp"
