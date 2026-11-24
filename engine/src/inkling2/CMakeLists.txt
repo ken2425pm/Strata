@@ -190,7 +190,11 @@ if(STRATA_BUILD_TESTS)
 endif()
 
 # Optional GPU backend plug-ins (automatically wired when backend lane lands its subfolder!)
-if(STRATA_ENABLE_CUDA)
+# The AMD gfx906/gfx900 compat build forces STRATA_ENABLE_CUDA on (its CUDA:: targets are HIP aliases) WITHOUT a CUDA
+# toolchain, so this block must ask for the real language, not the flag: otherwise configure stops on "Failed to find
+# nvcc".  There is no wave64 lane for inkling2 (hip/ covers the wave32 RDNA arches), so that build gets the CPU
+# backend, which is what make_default_backend() falls back to.
+if(STRATA_ENABLE_CUDA AND NOT STRATA_HIP_GFX906)
   if(MSVC AND NOT DEFINED CMAKE_CUDA_RUNTIME_LIBRARY)
     set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
   endif()
@@ -234,10 +238,13 @@ if(STRATA_ENABLE_CUDA)
   target_link_libraries(strata-inkling PRIVATE strata_inkling_ep_cuda)
   target_compile_definitions(strata-inkling PRIVATE INKLING_ENABLE_EP_CUDA=1)
 endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cuda/CMakeLists.txt" AND STRATA_ENABLE_CUDA)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/cuda/CMakeLists.txt" AND STRATA_ENABLE_CUDA AND NOT STRATA_HIP_GFX906)
   add_subdirectory(cuda)
 endif()
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/hip/CMakeLists.txt" AND STRATA_ENABLE_HIP)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/hip/CMakeLists.txt" AND (STRATA_ENABLE_HIP OR STRATA_HIP_GFX906))
+  # STRATA_HIP_GFX906 (the wave64 CUDA-compat build, gfx900/gfx906): the lane's kernels are gated at compile time by
+  # INK_HAS_WMMA (gfx11/12 only), so a gfx900 pass takes the zero-WMMA / scalar dot fallbacks and needs only the two
+  # clang-18 fixes (alignas placement, INK_HAS_FDOT2).  Point STRATA_HIP_ARCHS at the card, e.g. -DSTRATA_HIP_ARCHS=gfx900.
   add_subdirectory(hip)
 endif()
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/metal/CMakeLists.txt" AND APPLE)

@@ -159,7 +159,7 @@ __global__ void __launch_bounds__(256) k5_beam_cand_scores(
         half_t   h[kBeamW * 2304];   // 18,432 B
         uint16_t bf[kBeamW * 2304];  // 18,432 B
     };
-    __shared__ alignas(16) CorrLds sc;
+    __shared__ CorrLds sc __attribute__((aligned(16)));
     const int tot = W_active * D;
     if (fmt < 100) {
         for (int i = tid; i < tot; i += 256) sc.h[i] = static_cast<half_t>(corr[i]);
@@ -726,7 +726,7 @@ __global__ void __launch_bounds__(128) k3_flash_swa_gqa_tree(
 
     __shared__ float s_max[4];
     __shared__ float s_sum[4];
-    __shared__ alignas(16) float4 s_o[4][32];
+    __shared__ float4 s_o[4][32] __attribute__((aligned(16)));
     if (lane == 0) { s_max[wave] = max_l; s_sum[wave] = sum_exp; }
     s_o[wave][lane] = make_float4(o0, o1, o2, o3);
     __syncthreads();
@@ -856,7 +856,7 @@ __global__ void __launch_bounds__(256) k3_flash_tree_splitkv_part(
 
     __shared__ float s_max[8];
     __shared__ float s_sum[8];
-    __shared__ alignas(16) float4 s_o[8][32];
+    __shared__ float4 s_o[8][32] __attribute__((aligned(16)));
     if (lane == 0) { s_max[wave] = max_l; s_sum[wave] = sum_exp; }
     s_o[wave][lane] = make_float4(o0, o1, o2, o3);
     __syncthreads();
@@ -916,7 +916,7 @@ __global__ void __launch_bounds__(256) k_unembed_argmax_batch_stage1(
             int32_t wi[MT * 8];
         } red;
     };
-    __shared__ alignas(16) ArgLds u;
+    __shared__ ArgLds u __attribute__((aligned(16)));
 
     const bool use_lds = (MT <= 7 && D <= 2304);
     if constexpr (MT <= 7) {

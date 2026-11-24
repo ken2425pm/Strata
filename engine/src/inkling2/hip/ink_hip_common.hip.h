@@ -47,6 +47,11 @@
 #define INK_HAS_SDOT4 0
 #endif
 
+// gfx900 (Vega 10) has neither dot4- nor dot2-insts: v_dot2_f32_f16 arrives with gfx906, so the target set that has
+// sdot4 is exactly the set that has fdot2.  Without this guard the whole lane fails to compile on gfx900
+// ("'__builtin_amdgcn_fdot2' needs target feature dot2-insts"), which is the only hard blocker the port has.
+#define INK_HAS_FDOT2 INK_HAS_SDOT4
+
 #define INK_HCK(expr)                                                                                                  \
     do {                                                                                                               \
         hipError_t _e = (expr);                                                                                        \
@@ -142,7 +147,17 @@ __device__ __forceinline__ uint32_t h2_mul(uint32_t a, uint32_t b) {
 }
 
 __device__ __forceinline__ float fdot2_f32(uint32_t a, uint32_t b, float c) {
+#if INK_HAS_FDOT2
     return __builtin_amdgcn_fdot2(__builtin_bit_cast(hv2, a), __builtin_bit_cast(hv2, b), c, false);
+#else
+    // gfx900: the instruction's own arithmetic (two FP16 products into an FP32 accumulator), without v_dot2_f32_f16.
+    // Order is c + a1*b1 then + a0*b0, so a result may differ from the instruction in the last bit; nothing on
+    // gfx900 can be compared bitwise against a gfx906 run anyway (this is a new target, not a re-layout).
+    float a0, a1, b0, b1;
+    h2_unpack(a, a0, a1);
+    h2_unpack(b, b0, b1);
+    return fmaf(a0, b0, fmaf(a1, b1, c));
+#endif
 }
 
 __device__ __forceinline__ int sdot4_i32(int a, int b, int c) {

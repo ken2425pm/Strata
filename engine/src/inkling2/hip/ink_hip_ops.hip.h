@@ -810,8 +810,8 @@ __global__ void __launch_bounds__(128) k1_loop_ctrl_down_wmma_fused(
     int M, int D) {
 #if INK_HAS_WMMA
     constexpr int BM = 64, BN = 64, BK = 64, LD = BK + 8;
-    __shared__ alignas(16) uint16_t sX[BM * LD];   // 9,216 B
-    __shared__ alignas(16) uint16_t sW[BN * LD];   // 9,216 B -> 18,432 B (18.0 KB!)
+    __shared__ uint16_t sX[BM * LD] __attribute__((aligned(16)));   // 9,216 B
+    __shared__ uint16_t sW[BN * LD] __attribute__((aligned(16)));   // 9,216 B -> 18,432 B (18.0 KB!)
     __shared__ float sInvC[BM];
     __shared__ float sInvM[BM];
 
@@ -917,9 +917,9 @@ __global__ void __launch_bounds__(128) k1_loop_ctrl_up_wmma_fused(
     int M, int D) {
 #if INK_HAS_WMMA
     constexpr int BM = 64, BN = 64, BK = 64, LD = BK + 8;
-    __shared__ alignas(16) uint16_t sG[BM * LD];   // 9,216 B
-    __shared__ alignas(16) uint16_t sWg[BN * LD];  // 9,216 B
-    __shared__ alignas(16) uint16_t sWf[BN * LD];  // 9,216 B -> 27,648 B (27.0 KB!)
+    __shared__ uint16_t sG[BM * LD] __attribute__((aligned(16)));   // 9,216 B
+    __shared__ uint16_t sWg[BN * LD] __attribute__((aligned(16)));  // 9,216 B
+    __shared__ uint16_t sWf[BN * LD] __attribute__((aligned(16)));  // 9,216 B -> 27,648 B (27.0 KB!)
 
     const int tid = threadIdx.x;
     const int wave = tid >> 5;
@@ -1899,7 +1899,7 @@ __global__ void __launch_bounds__(128) k3_flash_swa_gqa_splitkv(
     // 1 single __syncthreads() to merge the 4 waves' online-softmax accumulators!
     __shared__ float s_max[4];
     __shared__ float s_sum[4];
-    __shared__ alignas(16) float4 s_o[4][32];
+    __shared__ float4 s_o[4][32] __attribute__((aligned(16)));
     if (lane == 0) { s_max[wave] = max_l; s_sum[wave] = sum_exp; }
     s_o[wave][lane] = make_float4(o0, o1, o2, o3);
     __syncthreads();
@@ -2021,7 +2021,7 @@ __global__ void __launch_bounds__(256) k3_flash_splitkv_part(
 
     __shared__ float s_max[8];
     __shared__ float s_sum[8];
-    __shared__ alignas(16) float4 s_o[8][32];
+    __shared__ float4 s_o[8][32] __attribute__((aligned(16)));
     if (lane == 0) { s_max[wave] = max_l; s_sum[wave] = sum_exp; }
     s_o[wave][lane] = make_float4(o0, o1, o2, o3);
     __syncthreads();
@@ -2125,7 +2125,7 @@ __global__ void __launch_bounds__(128) k3_flash_swa_gqa_prefill_wmma(
         alignas(16) half_t sVt[HD * LDV];  // [128, 72] for transposed V tiles
     };
     __shared__ KvBuf kv;
-    __shared__ alignas(16) half_t sP[BQ * LDP];
+    __shared__ half_t sP[BQ * LDP] __attribute__((aligned(16)));
 
     const int tid = threadIdx.x;
     const int wave = tid >> 5;
@@ -3270,7 +3270,7 @@ __global__ void __launch_bounds__(256) k_unembed_softcap(
         }
     } else {
         // S_K (especially S6_K on SQ-10/SQ-15/SQ-20!): cache each 256-elem superblock of h_norm as FP16 in LDS ONCE for all 8 waves!
-        __shared__ alignas(16) half_t sH[16 * 256];  // 8,192 B
+        __shared__ half_t sH[16 * 256] __attribute__((aligned(16)));  // 8,192 B
         const int sb_b = sk_sb_bytes(fmt);
         const int nsb = D >> 8;
         const uint8_t* wr = (v < V) ? (unemb_raw + static_cast<size_t>(v) * nsb * sb_b) : nullptr;
@@ -3347,8 +3347,8 @@ __global__ void __launch_bounds__(256) k5_dspark_packed_argmax_stage1(
     const int wave = tid >> 5;
     const int lane = tid & 31;
 
-    __shared__ alignas(16) float s_comb[2304];
-    __shared__ alignas(16) half_t s_comb_h[2304];
+    __shared__ float s_comb[2304] __attribute__((aligned(16)));
+    __shared__ half_t s_comb_h[2304] __attribute__((aligned(16)));
     for (int d = tid; d < D; d += 256) {
         const float c = cur_step[d] + corr[d];
         s_comb[d] = c;
@@ -3456,7 +3456,7 @@ __global__ void __launch_bounds__(256) k5_dspark_base_top2_screen(
             int32_t i[7 * 16];
         } red;
     };
-    __shared__ alignas(16) ScreenLds u;
+    __shared__ ScreenLds u __attribute__((aligned(16)));
     if (fmt < 100) {
         const int tot = n_draft * D;
         for (int idx = tid; idx < tot; idx += 256) {
@@ -3641,8 +3641,8 @@ __global__ void __launch_bounds__(256) k5_dspark_cand_argmax_stage1(
     const int wave = tid >> 5;
     const int lane = tid & 31;
 
-    __shared__ alignas(16) float s_corr[2304];
-    __shared__ alignas(16) half_t s_corr_h[2304];
+    __shared__ float s_corr[2304] __attribute__((aligned(16)));
+    __shared__ half_t s_corr_h[2304] __attribute__((aligned(16)));
     for (int d = tid; d < D; d += 256) {
         const float c = corr[d];
         s_corr[d] = c;
